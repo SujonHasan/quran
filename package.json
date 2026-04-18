@@ -1,0 +1,22 @@
+{
+  "name": "quran-reader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "data:sync": "npm --workspace @quran-reader/quran-data run data:sync",
+    "data:validate": "npm --workspace @quran-reader/quran-data run data:validate",
+    "dev": "concurrently \"npm --workspace @quran-reader/api run dev\" \"npm --workspace @quran-reader/web run dev\"",
+    "test": "npm --workspaces --if-present run test",
+    "build": "npm run data:validate && npm --workspace @quran-reader/quran-data run build && npm --workspace @quran-reader/api run build && npm --workspace @quran-reader/web run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

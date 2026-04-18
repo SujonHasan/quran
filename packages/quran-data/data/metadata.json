@@ -1,0 +1,11 @@
+{
+  "source": "risan/quran-json",
+  "sourceUrl": "https://github.com/risan/quran-json",
+  "cdnBaseUrl": "https://cdn.jsdelivr.net/npm/quran-json@3.1.2/dist/chapters/en",
+  "quranJsonVersion": "3.1.2",
+  "license": "CC-BY-SA-4.0",
+  "translation": "English, Saheeh International via Tanzil as credited by quran-json",
+  "downloadedAt": "2026-04-17T16:45:32.836Z",
+  "surahCount": 114,
+  "ayahCount": 6236
+}

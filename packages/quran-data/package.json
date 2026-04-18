@@ -1,0 +1,27 @@
+{
+  "name": "@quran-reader/quran-data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "data:sync": "node scripts/sync-data.mjs",
+    "data:validate": "npm run build && node dist/validate.js",
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "files": [
+    "dist",
+    "data"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.10.2"
+  }
+}
