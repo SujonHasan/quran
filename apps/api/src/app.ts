@@ -42,3 +42,5 @@ app.get("/search", (context) => {
     results: searchTranslations(query, safeLimit)
   });
 });
+
+export default app;
