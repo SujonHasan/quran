@@ -16,9 +16,9 @@ The web app runs on `http://localhost:3000` and the API runs on `http://localhos
 
 ## Data Attribution
 
-Quran data is collected from [`risan/quran-json`](https://github.com/risan/quran-json), which is licensed under CC-BY-SA 4.0. The upstream project credits Tanzil for the English translation source. Tanzil asks applications using its Quran text and translations to clearly indicate the source and link back to Tanzil resources:
+Built by Sujon Hasan.
 
-- https://tanzil.ir/docs/text_license
-- https://tanzil.ir/trans/
+This project uses Quran data from [`risan/quran-json`](https://github.com/risan/quran-json), licensed under CC-BY-SA 4.0. The dataset includes Arabic Quran text and English translation.
 
-This project stores Arabic Quran text and English translation only.
+The upstream dataset credits Tanzil as a source for the English translation, so this project includes attribution links to the [Tanzil text license](https://tanzil.ir/docs/text_license) and [Tanzil translations](https://tanzil.ir/trans/).
+

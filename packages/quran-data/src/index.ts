@@ -14,6 +14,42 @@ export type {
 
 let cachedSurahs: Surah[] | undefined;
 let cachedSearchIndex: SearchIndexEntry[] | undefined;
+let cachedPreparedSearchIndex: PreparedSearchEntry[] | undefined;
+
+interface PreparedSearchEntry extends SearchIndexEntry {
+  normalizedArabic: string;
+  normalizedSurahName: string;
+  normalizedSurahTransliteration: string;
+  normalizedSurahTranslation: string;
+  normalizedReference: string;
+}
+
+interface RankedSearchEntry {
+  entry: PreparedSearchEntry;
+  rank: number;
+  matchedTerms: string[][];
+}
+
+const stopWords = new Set(["a", "an", "and", "are", "chapter", "for", "in", "is", "of", "surah", "the", "to", "who"]);
+
+const synonymMap = new Map<string, string[]>([
+  ["allah", ["allah", "god"]],
+  ["god", ["god", "allah", "deity"]],
+  ["judgement", ["judgement", "judgment", "recompense", "account"]],
+  ["judgment", ["judgment", "judgement", "recompense", "account"]],
+  ["recompense", ["recompense", "judgment", "judgement", "account"]],
+  ["mercy", ["mercy", "merciful"]],
+  ["merciful", ["merciful", "mercy"]],
+  ["paradise", ["paradise", "garden", "gardens"]],
+  ["garden", ["garden", "gardens", "paradise"]],
+  ["gardens", ["gardens", "garden", "paradise"]],
+  ["hell", ["hell", "fire"]],
+  ["prayer", ["prayer", "pray"]],
+  ["pray", ["pray", "prayer"]],
+  ["charity", ["charity", "zakah", "zakat"]],
+  ["zakat", ["zakat", "zakah", "charity"]],
+  ["zakah", ["zakah", "zakat", "charity"]]
+]);
 
 function readJson<T>(fileName: string): T {
   return JSON.parse(readFileSync(resolveDataFile(fileName), "utf8")) as T;
@@ -46,6 +82,21 @@ function getSearchIndex(): SearchIndexEntry[] {
   return cachedSearchIndex;
 }
 
+function getPreparedSearchIndex(): PreparedSearchEntry[] {
+  cachedPreparedSearchIndex ??= getSearchIndex().map((entry) => {
+    const surah = getSurahById(entry.surahId);
+    return {
+      ...entry,
+      normalizedArabic: normalizeArabicText(entry.arabic),
+      normalizedSurahName: normalizeArabicText(entry.surahName),
+      normalizedSurahTransliteration: normalizeSearchText(entry.surahTransliteration),
+      normalizedSurahTranslation: normalizeSearchText(surah?.translation ?? ""),
+      normalizedReference: `${entry.surahId}:${entry.ayahId}`
+    };
+  });
+  return cachedPreparedSearchIndex;
+}
+
 export function getAllSurahs(): Surah[] {
   return getSurahs();
 }
@@ -64,27 +115,27 @@ export function getTotalAyahCount(): number {
 
 export function searchTranslations(query: string, limit = 30): SearchResult[] {
   const normalizedQuery = normalizeSearchText(query);
-  if (!normalizedQuery) {
+  const normalizedArabicQuery = normalizeArabicText(query);
+  const referenceQuery = parseReferenceQuery(query);
+
+  if (!normalizedQuery && !normalizedArabicQuery && !referenceQuery) {
     return [];
   }
 
-  const terms = normalizedQuery.split(" ").filter(Boolean);
-  return getSearchIndex()
-    .map((entry) => {
-      const rank = rankEntry(entry.normalizedTranslation, normalizedQuery, terms);
-      return rank > 0 ? { entry, rank } : undefined;
-    })
-    .filter((result): result is { entry: SearchIndexEntry; rank: number } => Boolean(result))
+  const termGroups = createTermGroups(normalizedQuery);
+  return getPreparedSearchIndex()
+    .map((entry) => rankEntry(entry, normalizedQuery, normalizedArabicQuery, termGroups, referenceQuery))
+    .filter((result): result is RankedSearchEntry => Boolean(result))
     .sort((a, b) => b.rank - a.rank || a.entry.surahId - b.entry.surahId || a.entry.ayahId - b.entry.ayahId)
     .slice(0, limit)
-    .map(({ entry }) => ({
+    .map(({ entry, matchedTerms }) => ({
       surahId: entry.surahId,
       ayahId: entry.ayahId,
       surahName: entry.surahName,
       surahTransliteration: entry.surahTransliteration,
       arabic: entry.arabic,
       translation: entry.translation,
-      matchSnippet: createSnippet(entry.translation, normalizedQuery, terms)
+      matchSnippet: createSnippet(entry.translation, normalizedQuery, matchedTerms)
     }));
 }
 
@@ -138,28 +189,157 @@ function normalizeSearchText(value: string): string {
     .trim();
 }
 
-function rankEntry(translation: string, query: string, terms: string[]): number {
-  if (translation === query) {
-    return 1000;
-  }
-  if (translation.includes(query)) {
-    return 500 + query.length;
-  }
-
-  let score = 0;
-  for (const term of terms) {
-    if (translation.includes(term)) {
-      score += 10 + term.length;
-    }
-  }
-  return score;
+function normalizeArabicText(value: string): string {
+  return value
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "")
+    .replace(/ـ/g, "")
+    .replace(/[إأآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/[^\u0600-\u06FF0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function createSnippet(translation: string, query: string, terms: string[]): string {
+function parseReferenceQuery(query: string): { surahId: number; ayahId?: number } | undefined {
+  const normalized = query.trim();
+  const match = normalized.match(/^(\d{1,3})(?::|\.|-|\s+)(\d{1,3})$/);
+  if (match) {
+    return {
+      surahId: Number(match[1]),
+      ayahId: Number(match[2])
+    };
+  }
+
+  const surahOnlyMatch = normalized.match(/^(?:surah|chapter)\s+(\d{1,3})$/i);
+  if (surahOnlyMatch) {
+    return {
+      surahId: Number(surahOnlyMatch[1])
+    };
+  }
+
+  return undefined;
+}
+
+function createTermGroups(query: string): string[][] {
+  const terms = query.split(" ").filter(Boolean);
+  const significantTerms = terms.filter((term) => !stopWords.has(term));
+  const searchTerms = significantTerms.length > 0 ? significantTerms : terms;
+
+  return searchTerms.map((term) => Array.from(new Set([term, ...(synonymMap.get(term) ?? [])])));
+}
+
+function rankEntry(
+  entry: PreparedSearchEntry,
+  query: string,
+  arabicQuery: string,
+  termGroups: string[][],
+  referenceQuery: { surahId: number; ayahId?: number } | undefined
+): RankedSearchEntry | undefined {
+  let rank = 0;
+  const matchedTerms: string[][] = [];
+
+  if (referenceQuery?.surahId === entry.surahId) {
+    if (referenceQuery.ayahId) {
+      rank += referenceQuery.ayahId === entry.ayahId ? 10000 : 0;
+    } else {
+      rank += 700;
+    }
+  }
+
+  if (query) {
+    rank += rankPhrase(entry.normalizedTranslation, query, 700);
+    rank += rankPhrase(entry.normalizedSurahTransliteration, query, 500);
+    rank += rankPhrase(entry.normalizedSurahTranslation, query, 380);
+
+    for (const group of termGroups) {
+      const best = bestTermScore(entry, group);
+      if (best.score > 0) {
+        rank += best.score;
+        matchedTerms.push([best.term]);
+      }
+    }
+
+    if (termGroups.length > 1 && matchedTerms.length === termGroups.length) {
+      rank += 180;
+    }
+
+    if (termGroups.length > 1 && matchedTerms.length === 1 && !entry.normalizedTranslation.includes(query)) {
+      rank -= 35;
+    }
+  }
+
+  if (arabicQuery) {
+    rank += rankPhrase(entry.normalizedArabic, arabicQuery, 700);
+    rank += rankPhrase(entry.normalizedSurahName, arabicQuery, 500);
+  }
+
+  if (rank <= 0) {
+    return undefined;
+  }
+
+  return {
+    entry,
+    rank,
+    matchedTerms
+  };
+}
+
+function rankPhrase(field: string, query: string, weight: number): number {
+  if (!field || !query) {
+    return 0;
+  }
+  if (field === query) {
+    return weight + 120;
+  }
+  if (field.includes(query)) {
+    return weight + query.length;
+  }
+  return 0;
+}
+
+function bestTermScore(entry: PreparedSearchEntry, terms: string[]): { score: number; term: string } {
+  let best = { score: 0, term: terms[0] ?? "" };
+  for (const term of terms) {
+    const scores = [
+      scoreTerm(entry.normalizedTranslation, term, 80, 34),
+      scoreTerm(entry.normalizedSurahTransliteration, term, 140, 80),
+      scoreTerm(entry.normalizedSurahTranslation, term, 110, 65)
+    ];
+    const score = Math.max(...scores);
+    if (score > best.score) {
+      best = { score, term };
+    }
+  }
+  return best;
+}
+
+function scoreTerm(field: string, term: string, exactWeight: number, containsWeight: number): number {
+  if (!field || !term) {
+    return 0;
+  }
+
+  const tokens = field.split(" ");
+  if (tokens.includes(term)) {
+    return exactWeight + term.length;
+  }
+  if (tokens.some((token) => token.startsWith(term) && term.length >= 3)) {
+    return Math.round(exactWeight * 0.75) + term.length;
+  }
+  if (field.includes(term)) {
+    return containsWeight + term.length;
+  }
+  return 0;
+}
+
+function createSnippet(translation: string, query: string, termGroups: string[][]): string {
   const normalizedTranslation = normalizeSearchText(translation);
+  const flattenedTerms = termGroups.flat();
   const firstNeedle = normalizedTranslation.includes(query)
     ? query
-    : terms.find((term) => normalizedTranslation.includes(term));
+    : flattenedTerms.find((term) => normalizedTranslation.includes(term));
 
   if (!firstNeedle) {
     return translation.length > 180 ? `${translation.slice(0, 177)}...` : translation;

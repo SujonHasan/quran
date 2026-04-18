@@ -88,13 +88,13 @@ export function SearchBox() {
     <div className="relative w-full sm:w-[25rem]">
       <form onSubmit={handleSubmit} className="flex gap-2">
         <label className="sr-only" htmlFor="quran-search">
-          Search English translation
+          Search Quran text
         </label>
         <input
           id="quran-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search translation"
+          placeholder="Search mercy, Fatihah, or 2:255"
           className="h-11 min-w-0 flex-1 rounded-lg border border-black/15 bg-white px-4 text-sm text-ink outline-none transition placeholder:text-ink/35 focus:border-leaf focus:ring-2 focus:ring-leaf/15"
         />
         <button

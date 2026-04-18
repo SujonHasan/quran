@@ -27,6 +27,41 @@ test("searches English translations", () => {
   assert.ok(results.some((result) => result.translation.toLowerCase().includes("merc")));
 });
 
+test("prioritizes all-term and synonym matches for common Quran phrasing", () => {
+  const [result] = searchTranslations("day judgment", 5);
+
+  assert.ok(result);
+  assert.equal(`${result.surahId}:${result.ayahId}`, "1:4");
+});
+
+test("searches by surah transliteration", () => {
+  const [result] = searchTranslations("fatihah", 5);
+
+  assert.ok(result);
+  assert.equal(result.surahId, 1);
+});
+
+test("searches by ayah reference", () => {
+  const [result] = searchTranslations("2:255", 5);
+
+  assert.ok(result);
+  assert.equal(`${result.surahId}:${result.ayahId}`, "2:255");
+});
+
+test("searches by surah number", () => {
+  const [result] = searchTranslations("surah 2", 5);
+
+  assert.ok(result);
+  assert.equal(`${result.surahId}:${result.ayahId}`, "2:1");
+});
+
+test("searches Arabic surah names without diacritics", () => {
+  const [result] = searchTranslations("الفاتحة", 5);
+
+  assert.ok(result);
+  assert.equal(result.surahId, 1);
+});
+
 test("returns no results for blank search", () => {
   assert.deepEqual(searchTranslations("   "), []);
 });
